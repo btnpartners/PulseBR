@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PulseBR – Brazilian Financial News Scanner</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg2: #f5f5f3;
+      --bg3: #efefec;
+      --text: #1a1a18;
+      --text2: #6b6b67;
+      --text3: #9b9b96;
+      --border: rgba(0,0,0,0.10);
+      --border2: rgba(0,0,0,0.18);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --accent: #D85A30;
+      --accent-dark: #993C1D;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a;
+        --bg2: #252523;
+        --bg3: #2e2e2b;
+        --text: #f0f0ed;
+        --text2: #a0a09b;
+        --text3: #6b6b67;
+        --border: rgba(255,255,255,0.10);
+        --border2: rgba(255,255,255,0.18);
+      }
+    }
+
+    body { font-family: var(--font); font-size: 14px; color: var(--text); background: var(--bg3); min-height: 100vh; }
+
+    /* ── Layout ── */
+    .app { display: flex; flex-direction: column; min-height: 100vh; max-width: 1200px; margin: 0 auto; background: var(--bg); box-shadow: 0 0 0 0.5px var(--border); }
+
+    /* ── Topbar ── */
+    .topbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 0.5px solid var(--border); flex-wrap: wrap; background: var(--bg); }
+    .logo { font-size: 17px; font-weight: 600; letter-spacing: -0.4px; white-space: nowrap; }
+    .logo em { font-style: normal; color: var(--accent); }
+
+    .search-tabs { display: flex; border: 0.5px solid var(--border2); border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0; }
+    .stab { padding: 6px 14px; font-size: 12px; cursor: pointer; background: var(--bg2); color: var(--text2); border: none; transition: all .15s; white-space: nowrap; font-family: var(--font); }
+    .stab.active { background: var(--bg); color: var(--text); font-weight: 500; }
+
+    .search-area { flex: 1; min-width: 200px; }
+
+    .kw-wrap { position: relative; }
+    .kw-wrap input { width: 100%; padding: 7px 12px 7px 32px; border-radius: var(--radius-md); border: 0.5px solid var(--border2); background: var(--bg2); font-size: 13px; color: var(--text); font-family: var(--font); }
+    .kw-wrap input:focus { outline: none; border-color: var(--accent); }
+    .si { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; opacity: .4; pointer-events: none; color: var(--text); }
+
+    .lbl-panel { display: none; flex-direction: column; gap: 7px; }
+    .lbl-search-wrap { position: relative; }
+    .lbl-search-wrap input { width: 100%; padding: 5px 10px 5px 28px; border-radius: var(--radius-md); border: 0.5px solid var(--border2); background: var(--bg2); font-size: 12px; color: var(--text); font-family: var(--font); }
+    .lbl-search-wrap input:focus { outline: none; border-color: var(--accent); }
+    .lbl-si { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; opacity: .4; pointer-events: none; color: var(--text); }
+    .labels-scroll { display: flex; flex-wrap: wrap; gap: 5px; max-height: 72px; overflow-y: auto; padding-right: 2px; }
+    .labels-scroll::-webkit-scrollbar { width: 3px; }
+    .labels-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    .lbl-chip { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; border: 0.5px solid var(--border2); cursor: pointer; background: var(--bg2); color: var(--text2); transition: all .15s; white-space: nowrap; }
+    .lbl-chip:hover { border-color: var(--accent); color: var(--text); }
+    .lbl-chip.sel { background: #FAECE7; border-color: var(--accent); color: #712B13; }
+    .lbl-chip.hidden { display: none; }
+
+    .scan-btn { padding: 7px 18px; border-radius: var(--radius-md); background: var(--accent); color: #fff; border: none; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; font-family: var(--font); transition: background .15s; }
+    .scan-btn:hover { background: var(--accent-dark); }
+    .scan-btn:disabled { background: var(--bg2); color: var(--text3); cursor: not-allowed; }
+
+    /* ── Sources bar ── */
+    .sources-bar { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 0.5px solid var(--border); align-items: center; flex-wrap: wrap; background: var(--bg); }
+    .src-label { font-size: 11px; color: var(--text3); margin-right: 2px; }
+    .src-chip { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 500; border: 0.5px solid var(--border2); cursor: pointer; background: var(--bg); color: var(--text2); transition: all .15s; }
+    .src-chip.active[data-src="valor"]    { background: #FAEEDA; border-color: #EF9F27; color: #633806; }
+    .src-chip.active[data-src="pipeline"] { background: #FAECE7; border-color: #D85A30; color: #712B13; }
+    .src-chip.active[data-src="exame"]    { background: #EAF3DE; border-color: #97C459; color: #27500A; }
+
+    /* ── Stats row ── */
+    .stats-row { display: none; gap: 10px; padding: 7px 16px; border-bottom: 0.5px solid var(--border); flex-wrap: wrap; align-items: center; background: var(--bg); }
+    .stat { font-size: 11px; color: var(--text2); }
+    .stat b { font-weight: 500; color: var(--text); }
+    .dot { color: var(--border2); }
+    .refresh-note { margin-left: auto; font-size: 10px; color: var(--text3); }
+
+    /* ── Main layout ── */
+    .main { display: flex; flex: 1; min-height: 500px; }
+
+    /* ── Sidebar ── */
+    .sidebar { width: 220px; border-right: 0.5px solid var(--border); padding: 14px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: var(--bg); }
+    .sec-title { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .6px; color: var(--text3); margin-bottom: 8px; }
+    .person-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; background: #FAECE7; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 500; color: #993C1D; flex-shrink: 0; }
+    .pname { font-size: 12px; color: var(--text); line-height: 1.3; }
+    .prole { font-size: 10px; color: var(--text3); }
+    .pbadge { margin-left: auto; font-size: 10px; background: var(--bg2); color: var(--text3); padding: 1px 5px; border-radius: 10px; flex-shrink: 0; }
+    .tag-cloud { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tag { padding: 3px 8px; border-radius: 20px; font-size: 11px; border: 0.5px solid var(--border); color: var(--text2); background: var(--bg2); }
+
+    /* ── Feed ── */
+    .feed { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--bg3); }
+
+    .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; cursor: pointer; transition: border-color .15s; }
+    .card:hover { border-color: var(--border2); }
+    .card.open { border-color: var(--accent); }
+
+    .card-top { display: flex; align-items: flex-start; gap: 10px; }
+    .card-info { flex: 1; }
+    .cmeta { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
+    .sbadge { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px; }
+    .sbadge.valor    { background: #FAEEDA; color: #633806; }
+    .sbadge.pipeline { background: #FAECE7; color: #712B13; }
+    .sbadge.exame    { background: #EAF3DE; color: #27500A; }
+    .ago { font-size: 11px; color: var(--text3); }
+    .edt { font-size: 11px; color: var(--text3); }
+    .ctitle { font-size: 14px; font-weight: 500; line-height: 1.4; color: var(--text); }
+
+    .sent { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 2px 8px; border-radius: 20px; flex-shrink: 0; margin-top: 1px; }
+    .sent.pos { background: #EAF3DE; color: #3B6D11; }
+    .sent.neg { background: #FCEBEB; color: #A32D2D; }
+    .sent.neu { background: #F1EFE8; color: #5F5E5A; }
+
+    .body { display: none; margin-top: 12px; padding-top: 12px; border-top: 0.5px solid var(--border); }
+    .card.open .body { display: block; }
+    .blbl { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .4px; color: var(--text3); margin-bottom: 5px; }
+    .summary { font-size: 13px; line-height: 1.65; color: var(--text2); }
+    .facts { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
+    .fact { font-size: 12px; color: var(--text2); padding-left: 13px; position: relative; line-height: 1.5; }
+    .fact::before { content: "·"; position: absolute; left: 3px; color: var(--text3); }
+
+    .prow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+    .ptag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; background: #FAECE7; font-size: 11px; color: #993C1D; border: 0.5px solid #F5C4B3; }
+
+    .quote-box { margin-top: 10px; padding: 9px 12px; background: var(--bg2); border-left: 2px solid var(--accent); border-radius: 0 var(--radius-md) var(--radius-md) 0; font-size: 12px; color: var(--text2); line-height: 1.6; font-style: italic; }
+    .quote-attr { font-style: normal; font-weight: 500; color: var(--text); font-size: 11px; margin-top: 4px; }
+
+    /* ── Loading skeleton ── */
+    .loading-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+    .ph { height: 11px; border-radius: 4px; background: var(--bg3); margin-bottom: 9px; animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Empty state ── */
+    .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 10px; color: var(--text3); padding: 48px; text-align: center; }
+    .empty-title { font-size: 15px; font-weight: 500; color: var(--text2); }
+    .try-btn { font-size: 12px; padding: 6px 14px; border-radius: var(--radius-md); border: 0.5px solid var(--border2); cursor: pointer; background: var(--bg); color: var(--text2); font-family: var(--font); transition: border-color .15s; }
+    .try-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    /* ── Error banner ── */
+    .error-banner { background: #FCEBEB; border: 0.5px solid #F7C1C1; border-radius: var(--radius-md); padding: 12px 16px; font-size: 13px; color: #A32D2D; margin: 0; }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      .topbar { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="logo">Pulse<em>BR</em></div>
+
+    <div class="search-tabs">
+      <button class="stab active" id="tabKw" onclick="switchTab('kw')">Keyword</button>
+      <button class="stab"        id="tabLbl" onclick="switchTab('lbl')">Label</button>
+    </div>
+
+    <div class="search-area">
+      <div id="kwPanel" class="kw-wrap">
+        <svg class="si" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="m10 10 3 3"/></svg>
+        <input id="q" type="text" placeholder="Company, topic or keyword..."/>
+      </div>
+      <div id="lblPanel" class="lbl-panel">
+        <div class="lbl-search-wrap">
+          <svg class="lbl-si" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="m10 10 3 3"/></svg>
+          <input id="lblSearch" type="text" placeholder="Filter labels..."/>
+        </div>
+        <div class="labels-scroll" id="labelsScroll"></div>
+      </div>
+    </div>
+
+    <button class="scan-btn" id="scanBtn" onclick="runScan()">Scan news</button>
+  </div>
+
+  <!-- Sources -->
+  <div class="sources-bar">
+    <span class="src-label">Sources:</span>
+    <span class="src-chip active" data-src="valor">Valor Econômico</span>
+    <span class="src-chip active" data-src="pipeline">Pipeline Valor</span>
+    <span class="src-chip active" data-src="exame">Exame</span>
+  </div>
+
+  <!-- Stats -->
+  <div id="statsRow" class="stats-row">
+    <span class="stat"><b id="sCount">0</b> articles</span>
+    <span class="dot">·</span>
+    <span class="stat"><b id="sPeople">0</b> people identified</span>
+    <span class="dot">·</span>
+    <span class="stat"><b id="sQuotes">0</b> direct quotes</span>
+    <span class="dot">·</span>
+    <span class="stat">Query: <b id="sTopic">—</b></span>
+    <span class="refresh-note">Last 48h · updates hourly</span>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="sidebar">
+      <div>
+        <div class="sec-title">People mentioned</div>
+        <div id="peopleList"><div style="font-size:12px;color:var(--text3)">Run a scan to see people</div></div>
+      </div>
+      <div>
+        <div class="sec-title">Topics</div>
+        <div class="tag-cloud" id="tagCloud"><div style="font-size:12px;color:var(--text3)">Topics appear after scan</div></div>
+      </div>
+    </div>
+
+    <div class="feed" id="feed">
+      <div class="empty">
+        <div style="font-size:32px">📰</div>
+        <div class="empty-title">Search by keyword or pick a label</div>
+        <div style="font-size:12px;max-width:240px">Type a company, sector or topic — or switch to Label and pick a category</div>
+        <button class="try-btn" onclick="setKw('Petrobras dividendos pré-sal')">Try: Petrobras dividendos ↗</button>
+        <button class="try-btn" onclick="setKw('Selic Banco Central inflação')">Try: Selic Banco Central ↗</button>
+        <button class="try-btn" onclick="setKw('Embraer resultados bolsa')">Try: Embraer resultados ↗</button>
+        <button class="try-btn" onclick="switchTab('lbl')">Browse all labels ↗</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const LABELS = [
+  'ABBC','ABECS','ABRACAM','Adquirentes','Agronegócios','Anbima','Asset Management',
+  'Assessores Investimento','BNPL','BaaS','Banco Central','Bancos','CCTVM','CSeg','CVM',
+  'Cartão Benefício','Cartão Crédito','Consignado','Consórcio','Consultores Investimento',
+  'Cooperativa','Corretoras','Crédito','Crédito Agrícola','Crédito Imobiliário',
+  'Crédito Pessoal','Crypto','DREX','DTVM','Duplicata','ERP','Economia','Educação',
+  'Embedded Finance','Energia','FENACOR','FIDC','Febraban','Financeira','Fintechs',
+  'Fundos Imobiliários','Gestoras','IP','IPO','ITP','Inadimplência','Infraestrutura',
+  'Insurtech','M&A','Mercado de Capitais','Open Finance','Open Insurance','PAT','PIX',
+  'PSAD','Pagamentos','Previdência','Private Equity','Regulação','SCD','Saúde','Seguros',
+  'Stablecoin','Susep','Tecnologia','VASP','VGBL','Varejo','Venture Capital','Wealth Management'
+];
+
+const labelMap = {
+  'ABBC':'Associação Brasileira de Bancos, bancos de médio porte, sistema financeiro',
+  'ABECS':'Associação Brasileira das Empresas de Cartões de Crédito e Serviços, meios de pagamento',
+  'ABRACAM':'Associação Brasileira de Câmbio, mercado de câmbio, remessas internacionais',
+  'Adquirentes':'adquirentes de pagamento, credenciadoras, Cielo, Rede, Stone, PagSeguro',
+  'Agronegócios':'agronegócio brasileiro, commodities agrícolas, exportações, safra, crédito rural',
+  'Anbima':'Anbima, mercado de capitais, fundos de investimento, regulação de ativos',
+  'Asset Management':'gestão de ativos, fundos de investimento, gestoras, alocação de portfólio',
+  'Assessores Investimento':'assessores de investimento, escritórios autônomos, XP, BTG, plataformas',
+  'BNPL':'buy now pay later, parcelamento, crédito no ponto de venda, BNPL Brasil',
+  'BaaS':'Banking as a Service, banco como serviço, infraestrutura bancária, white label',
+  'Banco Central':'Banco Central do Brasil, BCB, política monetária, Selic, regulação financeira',
+  'Bancos':'bancos brasileiros, sistema bancário, Itaú, Bradesco, Santander, BB, Caixa',
+  'CCTVM':'corretoras e distribuidoras de títulos e valores mobiliários',
+  'CSeg':'câmara de seguridade, seguros, resseguros',
+  'CVM':'Comissão de Valores Mobiliários, mercado de capitais, regulação de valores mobiliários',
+  'Cartão Benefício':'cartão benefício, vale alimentação, vale refeição, benefícios corporativos',
+  'Cartão Crédito':'cartão de crédito, bandeiras, Visa, Mastercard, parcelamento, limite de crédito',
+  'Consignado':'crédito consignado, empréstimo descontado em folha, INSS, servidores públicos',
+  'Consórcio':'consórcio, carta de crédito, autofinanciamento, administradoras de consórcio',
+  'Consultores Investimento':'consultores de investimento autônomos, CVM, planejamento financeiro',
+  'Cooperativa':'cooperativas de crédito, Sicoob, Sicredi, sistema cooperativista financeiro',
+  'Corretoras':'corretoras de valores, home broker, bolsa de valores, renda variável',
+  'Crédito':'crédito no Brasil, concessão de crédito, inadimplência, spreads bancários',
+  'Crédito Agrícola':'crédito agrícola, financiamento rural, Pronaf, custeio e investimento agrícola',
+  'Crédito Imobiliário':'crédito imobiliário, financiamento habitacional, Caixa, FGTS, Minha Casa Minha Vida',
+  'Crédito Pessoal':'crédito pessoal, empréstimo, fintech de crédito, taxa de juros pessoal',
+  'Crypto':'criptomoedas, bitcoin, ethereum, blockchain, ativos digitais, cripto no Brasil',
+  'DREX':'DREX, real digital, moeda digital do Banco Central, CBDC brasileira',
+  'DTVM':'distribuidoras de títulos e valores mobiliários, fundos, CDB',
+  'Duplicata':'duplicata mercantil, duplicata escritural, recebíveis, antecipação',
+  'ERP':'ERP, sistemas de gestão empresarial, software financeiro, SAP, TOTVS',
+  'Economia':'economia brasileira, PIB, crescimento, política econômica, indicadores',
+  'Educação':'educação financeira, fintechs de educação, crédito estudantil, FIES',
+  'Embedded Finance':'finanças embarcadas, embedded finance, integração financeira em plataformas',
+  'Energia':'energia, setor elétrico, petróleo, gás, Petrobras, Aneel, pré-sal, renováveis',
+  'FENACOR':'Fenacor, corretores de seguros, distribuição de seguros',
+  'FIDC':'FIDC, fundo de investimento em direitos creditórios, securitização, recebíveis',
+  'Febraban':'Febraban, federação dos bancos, sistema bancário, regulação, digital banking',
+  'Financeira':'financeiras, crédito ao consumidor, CDC, leasing, financiamento',
+  'Fintechs':'fintechs brasileiras, startups financeiras, inovação financeira, regulação fintech',
+  'Fundos Imobiliários':'fundos imobiliários, FII, renda passiva, CRI, CRA, B3',
+  'Gestoras':'gestoras de recursos, asset management, fundos, CVM, Anbima',
+  'IP':'instituição de pagamento, IP, Banco Central, regulação de pagamentos',
+  'IPO':'IPO, oferta pública inicial, abertura de capital, B3, mercado de capitais',
+  'ITP':'iniciador de transação de pagamento, ITP, open finance, PIX',
+  'Inadimplência':'inadimplência, calote, risco de crédito, NPL, recuperação de crédito',
+  'Infraestrutura':'infraestrutura financeira, sistemas de pagamento, concessões, obras, logística',
+  'Insurtech':'insurtechs, tecnologia de seguros, inovação no setor de seguros',
+  'M&A':'fusões e aquisições, M&A, private equity, deal, transação corporativa, consolidação',
+  'Mercado de Capitais':'mercado de capitais, bolsa, B3, ações, debêntures, renda variável',
+  'Open Finance':'open finance, open banking, compartilhamento de dados financeiros, Banco Central',
+  'Open Insurance':'open insurance, compartilhamento de dados de seguros, Susep',
+  'PAT':'Programa de Alimentação do Trabalhador, PAT, vale refeição, benefícios',
+  'PIX':'PIX, pagamento instantâneo, Banco Central, transferência, chave PIX',
+  'PSAD':'prestador de serviço de acesso a dados, PSAD, open finance',
+  'Pagamentos':'meios de pagamento, pagamentos digitais, infraestrutura de pagamentos',
+  'Previdência':'previdência privada, PGBL, VGBL, aposentadoria, fundos de pensão',
+  'Private Equity':'private equity, fundos de PE, investimento em empresas, gestoras',
+  'Regulação':'regulação financeira, Banco Central, CVM, Susep, compliance, normas',
+  'SCD':'sociedade de crédito direto, SCD, fintech de crédito, Banco Central',
+  'Saúde':'saúde, planos de saúde, fintechs de saúde, ANS, healthtechs',
+  'Seguros':'mercado de seguros, seguradoras, resseguros, Susep, produtos de seguro',
+  'Stablecoin':'stablecoin, criptomoeda estável, dólar digital, USDT, regulação crypto',
+  'Susep':'Susep, superintendência de seguros privados, regulação de seguros',
+  'Tecnologia':'tecnologia, inovação, fintechs, inteligência artificial, transformação digital',
+  'VASP':'VASP, provedores de ativos virtuais, regulação de crypto, Banco Central',
+  'VGBL':'VGBL, previdência privada, plano de seguro, aposentadoria complementar',
+  'Varejo':'varejo, comércio, e-commerce, crédito ao consumidor, varejo financeiro',
+  'Venture Capital':'venture capital, VC, investimento em startups, rodadas de investimento',
+  'Wealth Management':'wealth management, gestão de patrimônio, family office, private banking'
+};
+
+let activeTab = 'kw', selectedLabel = null;
+
+// Build label chips
+(function buildLabels() {
+  const scroll = document.getElementById('labelsScroll');
+  scroll.innerHTML = LABELS.map(l => `<span class="lbl-chip" data-lbl="${l}">${l}</span>`).join('');
+  scroll.querySelectorAll('.lbl-chip').forEach(c => {
+    c.onclick = () => {
+      scroll.querySelectorAll('.lbl-chip').forEach(x => x.classList.remove('sel'));
+      c.classList.add('sel');
+      selectedLabel = c.dataset.lbl;
+    };
+  });
+})();
+
+document.getElementById('lblSearch').addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#labelsScroll .lbl-chip').forEach(c => {
+    c.classList.toggle('hidden', !!q && !c.dataset.lbl.toLowerCase().includes(q));
+  });
+});
+
+document.querySelectorAll('.src-chip').forEach(c => { c.onclick = () => c.classList.toggle('active'); });
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') runScan(); });
+
+function switchTab(t) {
+  activeTab = t;
+  document.getElementById('tabKw').classList.toggle('active', t === 'kw');
+  document.getElementById('tabLbl').classList.toggle('active', t === 'lbl');
+  document.getElementById('kwPanel').style.display = t === 'kw' ? 'block' : 'none';
+  document.getElementById('lblPanel').style.display = t === 'lbl' ? 'flex' : 'none';
+}
+
+function setKw(v) { switchTab('kw'); document.getElementById('q').value = v; runScan(); }
+function getTopic() { return activeTab === 'kw' ? document.getElementById('q').value.trim() : selectedLabel || ''; }
+
+async function runScan() {
+  const topic = getTopic();
+  if (!topic) {
+    if (activeTab === 'kw') document.getElementById('q').focus();
+    else alert('Please select a label first.');
+    return;
+  }
+  const activeSrcs = [...document.querySelectorAll('.src-chip.active')]
+    .map(c => ({ valor: 'Valor Econômico', pipeline: 'Pipeline Valor', exame: 'Exame' }[c.dataset.src]))
+    .filter(Boolean);
+  if (!activeSrcs.length) { alert('Select at least one source.'); return; }
+
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.textContent = 'Scanning...';
+
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '';
+  for (let i = 0; i < 4; i++) feed.innerHTML += `<div class="loading-card"><div class="ph" style="width:55%"></div><div class="ph" style="width:88%"></div><div class="ph" style="width:70%"></div><div class="ph" style="width:40%"></div></div>`;
+
+  const srcList = activeSrcs.join(', ');
+  const expandedTopic = activeTab === 'lbl' ? (labelMap[topic] || topic) : topic;
+
+  const prompt = `Você é um analista jornalístico especializado no mercado financeiro brasileiro. Simule a varredura de notícias das últimas 48 horas sobre o tema: "${expandedTopic}".
+
+Fontes ativas: ${srcList}
+
+Gere 5 artigos jornalísticos realistas e distintos em português do Brasil, como se fossem notícias reais e recentes dessas fontes sobre o tema. Reflita o contexto real do mercado financeiro e da economia brasileira, com pessoas reais que teriam envolvimento com o assunto.
+
+Retorne APENAS um array JSON válido (sem markdown, sem texto extra) com esta estrutura exata:
+[
+  {
+    "id": 1,
+    "fonte": "Valor Econômico",
+    "titulo": "Título da notícia aqui",
+    "tempoAtras": "3h atrás",
+    "editoria": "pagamentos",
+    "sentimento": "positivo",
+    "resumo": "Resumo analítico de 2-3 frases explicando os principais pontos da notícia.",
+    "fatosChave": ["Fato específico com dado numérico 1", "Fato 2", "Fato 3"],
+    "citacaoDireta": {
+      "texto": "Fala atribuída a alguém relevante (string vazia se não houver)",
+      "autor": "Nome do autor",
+      "cargo": "Cargo do autor"
+    },
+    "pessoas": [
+      {"nome": "Nome Completo", "cargo": "Cargo real", "contexto": "O que fez ou disse nesta notícia"}
+    ],
+    "topicos": ["tag1", "tag2", "tag3"]
+  }
+]
+
+Regras:
+- sentimento: exatamente "positivo", "negativo" ou "neutro"
+- fonte: uma das fontes ativas — ${srcList}
+- Pipeline Valor foca em M&A, deals, private equity, fusões e aquisições
+- Valor Econômico cobre macro, regulação, empresas, governo, finanças
+- Exame cobre negócios, tecnologia, startups, mercado, inovação
+- tempoAtras: valores realistas entre "1h atrás" e "47h atrás"
+- pessoas: 1-4 pessoas reais e nomeadas com cargos plausíveis
+- fatosChave: 3 fatos com números e dados concretos
+- citacaoDireta.texto: string vazia se não houver fala relevante
+- topicos: 3-5 tags curtas em português
+- Varie as fontes entre os artigos`;
+
+  let articles = [];
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const clean = text.replace(/```json[\s\S]*?```|```/g, '').trim();
+    const m = clean.match(/\[[\s\S]*\]/);
+    articles = JSON.parse(m ? m[0] : clean);
+  } catch (e) {
+    feed.innerHTML = `<div class="error-banner">⚠️ Could not load articles. Please try again.<br><small style="opacity:.7">${e.message}</small></div>`;
+    btn.disabled = false; btn.textContent = 'Scan news';
+    return;
+  }
+
+  renderFeed(articles);
+
+  const allPeople = {}, allTopics = {};
+  let totalQuotes = 0;
+  articles.forEach(a => {
+    (a.pessoas || []).forEach(p => {
+      if (!allPeople[p.nome]) allPeople[p.nome] = { cargo: p.cargo, count: 0 };
+      allPeople[p.nome].count++;
+    });
+    (a.topicos || []).forEach(t => { allTopics[t] = (allTopics[t] || 0) + 1; });
+    if (a.citacaoDireta && a.citacaoDireta.texto) totalQuotes++;
+  });
+
+  const pList = document.getElementById('peopleList');
+  const sp = Object.entries(allPeople).sort((a, b) => b[1].count - a[1].count).slice(0, 8);
+  pList.innerHTML = sp.length ? sp.map(([n, d]) => `
+    <div class="person-item">
+      <div class="avatar">${n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+      <div style="flex:1;min-width:0"><div class="pname">${n}</div><div class="prole">${d.cargo}</div></div>
+      <div class="pbadge">${d.count}×</div>
+    </div>`).join('') : '<div style="font-size:12px;color:var(--text3)">No people identified</div>';
+
+  const tCloud = document.getElementById('tagCloud');
+  tCloud.innerHTML = Object.entries(allTopics).sort((a, b) => b[1] - a[1]).slice(0, 14)
+    .map(([t]) => `<span class="tag">${t}</span>`).join('') || '<div style="font-size:12px;color:var(--text3)">—</div>';
+
+  document.getElementById('sCount').textContent = articles.length;
+  document.getElementById('sPeople').textContent = Object.keys(allPeople).length;
+  document.getElementById('sQuotes').textContent = totalQuotes;
+  document.getElementById('sTopic').textContent = topic.length > 28 ? topic.slice(0, 28) + '…' : topic;
+  document.getElementById('statsRow').style.display = 'flex';
+  btn.disabled = false; btn.textContent = 'Scan news';
+}
+
+function renderFeed(arts) {
+  const feed = document.getElementById('feed');
+  if (!arts.length) { feed.innerHTML = '<div class="empty"><div>No articles found for this topic.</div></div>'; return; }
+  feed.innerHTML = arts.map(a => {
+    const sk = a.fonte && a.fonte.toLowerCase().includes('pipeline') ? 'pipeline' : a.fonte && a.fonte.toLowerCase().includes('exame') ? 'exame' : 'valor';
+    const sc = a.sentimento === 'positivo' ? 'pos' : a.sentimento === 'negativo' ? 'neg' : 'neu';
+    const si = a.sentimento === 'positivo' ? '↑' : a.sentimento === 'negativo' ? '↓' : '→';
+    const sl = a.sentimento === 'positivo' ? 'Positivo' : a.sentimento === 'negativo' ? 'Negativo' : 'Neutro';
+    const hq = a.citacaoDireta && a.citacaoDireta.texto;
+    return `<div class="card" id="c${a.id}" onclick="toggle(${a.id})">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="cmeta">
+            <span class="sbadge ${sk}">${a.fonte}</span>
+            <span class="ago">${a.tempoAtras || ''}</span>
+            <span class="edt">${a.editoria || ''}</span>
+          </div>
+          <div class="ctitle">${a.titulo}</div>
+        </div>
+        <span class="sent ${sc}">${si} ${sl}</span>
+      </div>
+      <div class="body">
+        <div class="blbl">Resumo analítico</div>
+        <div class="summary">${a.resumo}</div>
+        ${a.fatosChave && a.fatosChave.length ? `<div style="margin-top:10px"><div class="blbl">Dados e fatos</div><div class="facts">${a.fatosChave.map(f => `<div class="fact">${f}</div>`).join('')}</div></div>` : ''}
+        ${hq ? `<div class="quote-box">"${a.citacaoDireta.texto}"<div class="quote-attr">— ${a.citacaoDireta.autor}${a.citacaoDireta.cargo ? ', ' + a.citacaoDireta.cargo : ''}</div></div>` : ''}
+        ${a.pessoas && a.pessoas.length ? `<div style="margin-top:10px"><div class="blbl">Pessoas mencionadas</div><div class="prow">${a.pessoas.map(p => `<span class="ptag" title="${p.cargo}: ${p.contexto}">&#128100; ${p.nome}</span>`).join('')}</div></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggle(id) { document.getElementById('c' + id).classList.toggle('open'); }
+</script>
+</body>
+</html>
